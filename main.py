@@ -2,6 +2,7 @@ import time
 import requests
 import json
 import os
+import re
 from bs4 import BeautifulSoup
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -50,8 +51,8 @@ def solve_captcha(driver):
     ocr = ddddocr.DdddOcr(show_ad=False)
     with open("captcha.png", 'rb') as f:
         image_bytes = f.read()
-        
     captcha_text = ocr.classification(image_bytes)
+    captcha_text = re.sub(r'[^a-zA-Z0-9]', '', captcha_text)
     print(f"✨ AI ddddocr đọc được Captcha là: '{captcha_text}'")
     return captcha_text
 
@@ -63,7 +64,7 @@ def main():
     options.add_argument('--headless') 
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    
+    options.add_argument('--window-size=1920,1080')
     driver = uc.Chrome(options=options)
     
     try:
