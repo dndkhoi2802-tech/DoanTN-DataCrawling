@@ -37,3 +37,4 @@ jobs:
           # Nếu có bài đăng mới (file json bị thay đổi), nó sẽ commit ngược lên github
           git commit -m "Auto-update crawler history" || exit 0
           git push
+# Kich hoat lai server
