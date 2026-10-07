@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 import ddddocr
+import subprocess
 
 TELE_TOKEN = os.environ.get('TELE_TOKEN')
 CHAT_ID = os.environ.get('CHAT_ID')
@@ -14,7 +15,6 @@ IUH_USERNAME = os.environ.get('IUH_USERNAME')
 IUH_PASS = os.environ.get('IUH_PASS')
 
 HISTORY_FILE = 'sent_posts.json'
-DELAY_TIME = 300 
 
 def load_history():
     """Đọc các ID hoạt động đã gửi từ file JSON"""
@@ -30,6 +30,15 @@ def save_history(event_id):
         history.append(event_id)
         with open(HISTORY_FILE, 'w') as f:
             json.dump(history, f)
+
+def get_chrome_version():
+    """Tự động lấy phiên bản Chrome đang được cài trên máy chủ Linux"""
+    try:
+        output = subprocess.check_output(['google-chrome', '--version']).decode('utf-8')
+        version = int(output.split()[2].split('.')[0])
+        return version
+    except Exception:
+        return None
 
 def send_telegram(message_text):
     url = f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage"
@@ -65,7 +74,13 @@ def main():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
-    driver = uc.Chrome(options=options)
+
+    chrome_v = get_chrome_version()
+    if chrome_v:
+        print(f"Đang đồng bộ ChromeDriver với Chrome bản {chrome_v}...")
+        driver = uc.Chrome(options=options, version_main=chrome_v)
+    else:
+        driver = uc.Chrome(options=options)
     
     try:
         driver.get("https://doantn.iuh.edu.vn/login.html")
