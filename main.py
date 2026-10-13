@@ -9,12 +9,19 @@ from selenium.webdriver.common.by import By
 import ddddocr
 import subprocess
 
+
+
 TELE_TOKEN = os.environ.get('TELE_TOKEN')
 CHAT_ID = os.environ.get('CHAT_ID')
 IUH_USERNAME = os.environ.get('IUH_USERNAME')
 IUH_PASS = os.environ.get('IUH_PASS')
 
 HISTORY_FILE = 'sent_posts.json'
+MAX_CAPTCHA_ATTEMPTS = 5
+
+class CaptchaFailedError(Exception):
+    """Không đăng nhập được sau số lần thử captcha tối đa"""
+    pass
 
 def load_history():
     """Đọc các ID hoạt động đã gửi từ file JSON"""
@@ -65,12 +72,39 @@ def solve_captcha(driver):
     print(f"✨ AI ddddocr đọc được Captcha là: '{captcha_text}'")
     return captcha_text
 
+def login_with_retry(driver):
+    """Đăng nhập, thử tối đa MAX_CAPTCHA_ATTEMPTS lần. Quá số lần -> raise CaptchaFailedError"""
+    attempts = 0
+    while "doanvien.html" not in driver.current_url:
+        if attempts >= MAX_CAPTCHA_ATTEMPTS:
+            raise CaptchaFailedError(
+                f"Không giải được captcha sau {MAX_CAPTCHA_ATTEMPTS} lần thử."
+            )
+        attempts += 1
+        print(f"🔁 Lần đăng nhập {attempts}/{MAX_CAPTCHA_ATTEMPTS}")
+
+        try:
+            driver.find_element(By.ID, "mssv").clear()
+            driver.find_element(By.ID, "password").clear()
+            driver.find_element(By.ID, "security_code").clear()
+
+            driver.find_element(By.ID, "mssv").send_keys(IUH_USERNAME)
+            driver.find_element(By.ID, "password").send_keys(IUH_PASS)
+
+            captcha_text = solve_captcha(driver)
+            driver.find_element(By.ID, "security_code").send_keys(captcha_text)
+            driver.find_element(By.NAME, "btLogin").click()
+            time.sleep(3)
+        except Exception as e:
+            print(f"⚠️ Lần {attempts} lỗi: {e}")
+            time.sleep(2)
+
 def main():
     """Hàm thực thi 1 chu kỳ cào dữ liệu"""
     print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Bắt đầu phiên cào dữ liệu mới...")
-    
+
     options = uc.ChromeOptions()
-    options.add_argument('--headless') 
+    options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
@@ -81,23 +115,12 @@ def main():
         driver = uc.Chrome(options=options, version_main=chrome_v)
     else:
         driver = uc.Chrome(options=options)
-    
+
     try:
         driver.get("https://doantn.iuh.edu.vn/login.html")
         time.sleep(2)
 
-        while ("doanvien.html" not in driver.current_url):
-            driver.find_element(By.ID, "mssv").clear()
-            driver.find_element(By.ID, "password").clear()
-            driver.find_element(By.ID, "security_code").clear()
-
-            driver.find_element(By.ID, "mssv").send_keys(IUH_USERNAME)
-            driver.find_element(By.ID, "password").send_keys(IUH_PASS)
-            
-            captcha_text = solve_captcha(driver)
-            driver.find_element(By.ID, "security_code").send_keys(captcha_text)
-            driver.find_element(By.NAME, "btLogin").click()
-            time.sleep(3)
+        login_with_retry(driver)
 
         print("🔓 Đăng nhập thành công, đang đọc dữ liệu...")
         time.sleep(3)
@@ -105,12 +128,12 @@ def main():
         html_content = driver.page_source
         soup = BeautifulSoup(html_content, "html.parser")
         table = soup.find("table", class_="tblDoanvien")
-        
+
         if table:
             sent_posts = load_history()
             new_events_found = False
             rows = table.find("tbody").find_all("tr")
-            
+
             for row in rows:
                 cols = row.find_all("td")
                 if len(cols) >= 6:
@@ -119,7 +142,7 @@ def main():
                     event_id = title_tag.get("data-target", "") if title_tag else ""
                     date = cols[4].text.strip()
                     status = cols[5].text.strip()
-                    
+
                     if event_id and (event_id not in sent_posts):
                         new_events_found = True
                         msg = (
@@ -130,12 +153,16 @@ def main():
                         )
                         send_telegram(msg)
                         save_history(event_id)
-            
+
             if not new_events_found:
                 print("💤 Không có hoạt động nào mới.")
-        else: 
+        else:
             print("❌ Không tìm thấy bảng dữ liệu class 'tblDoanvien'.")
 
+    except CaptchaFailedError as e:
+        print(f"⛔ {e} Dừng workflow.")
+        send_telegram(f"⛔ <b>SCRIPT DỪNG</b>\n{e}\nWorkflow GitHub đã bị dừng.")
+        sys.exit(1)  # Exit code != 0 => step fail => workflow dừng
     except Exception as e:
         print(f"❌ Có lỗi xảy ra: {e}")
     finally:
