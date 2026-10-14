@@ -19,8 +19,7 @@ IUH_PASS = os.environ.get('IUH_PASS')
 HISTORY_FILE = 'sent_posts.json'
 MAX_CAPTCHA_ATTEMPTS = 5
 
-class CaptchaFailedError(Exception):
-    """Không đăng nhập được sau số lần thử captcha tối đa"""
+class CaptchaFailedError():
     pass
 
 def load_history():
@@ -77,9 +76,7 @@ def login_with_retry(driver):
     attempts = 0
     while "doanvien.html" not in driver.current_url:
         if attempts >= MAX_CAPTCHA_ATTEMPTS:
-            raise CaptchaFailedError(
-                f"Không giải được captcha sau {MAX_CAPTCHA_ATTEMPTS} lần thử."
-            )
+            raise CaptchaFailedError()
         attempts += 1
         print(f"🔁 Lần đăng nhập {attempts}/{MAX_CAPTCHA_ATTEMPTS}")
 
